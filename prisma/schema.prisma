@@ -1,0 +1,96 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SlotStatus {
+  available
+  full
+}
+
+enum Channel {
+  email
+  telegram
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  name         String?
+  telegramChat String?
+  createdAt    DateTime    @default(now())
+  watchlists   Watchlist[]
+  alerts       Alert[]
+}
+
+model Service {
+  id         String         @id @default(cuid())
+  name       String
+  slug       String         @unique
+  country    String
+  city       String?
+  sourceUrl  String
+  isActive   Boolean        @default(true)
+  locations  Location[]
+  snapshots  SlotSnapshot[]
+  watchlists Watchlist[]
+}
+
+model Watchlist {
+  id          String    @id @default(cuid())
+  userId      String
+  serviceId   String
+  locationId  String?
+  queryParams Json?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  service     Service   @relation(fields: [serviceId], references: [id])
+  location    Location? @relation(fields: [locationId], references: [id])
+  alerts      Alert[]
+}
+
+model Location {
+  id         String         @id @default(cuid())
+  serviceId  String
+  name       String
+  service    Service        @relation(fields: [serviceId], references: [id])
+  snapshots  SlotSnapshot[]
+  watchlists Watchlist[]
+}
+
+model SlotSnapshot {
+  id         String     @id @default(cuid())
+  serviceId  String
+  locationId String?
+  date       DateTime
+  time       String?
+  capacity   Int?
+  status     SlotStatus
+  fetchedAt  DateTime   @default(now())
+  service    Service    @relation(fields: [serviceId], references: [id])
+  location   Location?  @relation(fields: [locationId], references: [id])
+  alerts     Alert[]
+}
+
+model Alert {
+  id          String       @id @default(cuid())
+  userId      String
+  watchlistId String
+  snapshotId  String
+  channel     Channel
+  sentAt      DateTime     @default(now())
+  user        User         @relation(fields: [userId], references: [id])
+  watchlist   Watchlist    @relation(fields: [watchlistId], references: [id])
+  snapshot    SlotSnapshot @relation(fields: [snapshotId], references: [id])
+}
