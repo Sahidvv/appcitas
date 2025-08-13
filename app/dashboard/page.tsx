@@ -12,16 +12,20 @@ import type { Watchlist } from "@/types"
 import { authOptions } from "@/lib/auth"  // ← ahora sí existe
 import { getBaseUrl } from "@/lib/url"
 import { cookies } from "next/headers"
+import { signOut } from "next-auth/react" // 👈 importante
+import { UserMenu } from "@/components/user-menu" // si lo separas en un componente
+import { SignOutButton } from "@/components/sign-out-button" // 👈 nuevo
 
 async function WatchlistContent() {
     const base = getBaseUrl()
-  const cookie = cookies().toString() // reenvía sesión al API
-  // ⚠️ No uses el cliente `api` aquí (es client-only por los toasts)
+    const cookieStore = await cookies()
+    const cookieHeader = cookieStore.toString() // o bien: cookieStore.getAll().map(...).join("; ")
 
-  const res = await fetch(`${base}/api/watchlist`, {
-    cache: "no-store",
-    headers: { cookie },
-  })
+    const res = await fetch(`${base}/api/watchlist`, {
+      cache: "no-store",
+      headers: { cookie: cookieHeader },
+    })
+
 
   if (!res.ok) {
     return (
@@ -63,7 +67,7 @@ async function WatchlistContent() {
   )
 }
 
-async function AuthenticatedDashboard() {
+async function AuthenticatedDashboard({ email }: { email: string }) {
   return (
     <div className="container mx-auto p-4 sm:p-6 max-w-6xl">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
@@ -74,6 +78,8 @@ async function AuthenticatedDashboard() {
             Nueva vigilancia
           </Button>
         </NewWatchlistModal>
+                  <SignOutButton />
+
       </div>
 
       <Suspense fallback={<WatchlistSkeleton />}>
@@ -88,5 +94,6 @@ export default async function DashboardPage() {
   if (!session?.user) {
     return <AuthGate />
   }
-  return <AuthenticatedDashboard />
+  return <AuthenticatedDashboard email={session.user.email ?? ""} />
+
 }

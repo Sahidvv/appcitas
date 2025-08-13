@@ -1,43 +1,42 @@
-import { prisma } from '@/lib/db'
-import type { Slot } from './scraping/base'
+import { prisma } from "@/lib/db"
+import type { ScrapeResult } from "@/lib/scrapers/types"
+import { getScraperBySlug } from "@/lib/scrapers"
 
-export async function persistSlots({ serviceId, locationId, slots }:{
-  serviceId: string; locationId?: string; slots: Slot[]
-}) {
-  const created: string[] = []
-  for (const s of slots) {
-    const existing = await prisma.slotSnapshot.findFirst({
-      where: {
-        serviceId,
-        locationId: locationId ?? undefined,
-        date: new Date(s.date + 'T00:00:00.000Z'),
-        time: s.time ?? null,
-        status: s.status === 'available' ? 'available' : 'full',
-      }
+export async function runScraperAndStore(serviceSlug: string) {
+  const scraper = getScraperBySlug(serviceSlug)
+  if (!scraper) throw new Error(`Scraper not found: ${serviceSlug}`)
+  const results = await scraper.scrape()
+
+  const created = []
+  for (const r of results) {
+    const service = await prisma.service.findUnique({ where: { slug: r.serviceSlug } })
+    if (!service) continue
+
+    const snapshot = await prisma.slotSnapshot.create({
+      data: {
+        serviceId: service.id,
+        locationId: r.locationId ?? null,
+        date: new Date(),                   // o r.date si viene de la fuente
+        time: r.time ?? null,
+        capacity: r.capacity ?? null,
+        status: r.status === "available" ? "available" : "full",
+      },
     })
-    if (!existing) {
-      const snap = await prisma.slotSnapshot.create({
-        data: {
-          serviceId,
-          locationId: locationId ?? null,
-          date: new Date(s.date + 'T00:00:00.000Z'),
-          time: s.time ?? null,
-          capacity: s.capacity ?? null,
-          status: s.status === 'available' ? 'available' : 'full',
-        }
-      })
-      created.push(snap.id)
-    }
+    created.push(snapshot)
   }
   return created
 }
 
-export async function hasNewAvailable({ serviceId, locationId }:{
-  serviceId: string; locationId?: string
-}) {
-  const last = await prisma.slotSnapshot.findFirst({
-    where: { serviceId, locationId: locationId ?? undefined, status: 'available' },
-    orderBy: { fetchedAt: 'desc' }
-  })
-  return Boolean(last)
+export async function runAllScrapers() {
+  // Opcional: levantar todos de la tabla Service.isActive
+  const services = await prisma.service.findMany({ where: { isActive: true } })
+  const out = []
+  for (const s of services) {
+    try {
+      out.push(await runScraperAndStore(s.slug))
+    } catch (e) {
+      console.error("[scraper error]", s.slug, e)
+    }
+  }
+  return out.flat()
 }
